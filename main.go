@@ -21,11 +21,6 @@ type Url struct {
 var db = make(map[string]Url, 0)
 
 func main() {
-	port := os.Getenv("PORT")
-	if len(port) == 0 {
-		port = ":8081"
-	}
-
 	router := gin.Default()
 	router.LoadHTMLGlob("templates/*.html")
 	router.Static("/static", "./static")
@@ -137,5 +132,12 @@ func main() {
 			"db":    db,
 		})
 	})
-	router.Run(port) // listen and serve on 0.0.0.0:8080
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if err := router.Run(":" + port); err != nil {
+        log.Panicf("error: %s", err)
+	}
 }
