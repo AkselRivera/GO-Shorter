@@ -7,18 +7,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/akselrivera/go-shortener/models"
 	"github.com/akselrivera/go-shortener/utils"
+	"github.com/akselrivera/go-shortener/views"
 	"github.com/gin-gonic/gin"
 )
 
-type Url struct {
-	Url        string
-	Clicks     int
-	Expiration time.Time
-	hash       string
-}
-
-var db = make(map[string]Url, 0)
+var db = make(map[string]models.Url, 0)
+var errors = make(map[string]string, 0)
 
 func main() {
 	port := os.Getenv("PORT")
@@ -32,40 +28,47 @@ func main() {
 	//router.LoadHTMLFiles("templates/template1.html", "templates/template2.html")
 	router.GET("/", func(c *gin.Context) {
 
-		c.HTML(http.StatusOK, "index.html", gin.H{
-			"title": "GO - Shortener",
-			"db":    db,
-		})
+		c.HTML(http.StatusOK, "index.html", views.IndexView("", db, nil))
 	})
 
 	router.POST("/", func(c *gin.Context) {
 		url := c.PostForm("url")
+		var statusResponse int
+		var shortenedUrl string
 
+		log.Println(db[url], db[url] != (models.Url{}))
 		if len(url) <= 3 {
-			c.HTML(http.StatusBadRequest, "index.html", gin.H{
-				"title": "Main website",
-				"db":    db,
-			})
-		} else if db[url] != (Url{}) {
-			c.HTML(http.StatusConflict, "index.html", gin.H{
-				"title": "GO - Shortener",
-				"db":    db,
-			})
+			errors["url"] = "Invalid url"
+			log.Println(errors)
+			statusResponse = http.StatusBadRequest
+
+		} else if _, ok := db[url]; ok {
+			errors["url"] = "Url already exists"
+			log.Println("this url already exists", errors)
+			statusResponse = http.StatusConflict
+
 		} else {
-
+			statusResponse = http.StatusFound
 			var hash string = utils.GetHash()
-			var shortenedUrl string = fmt.Sprintf("%s/%s", c.Request.Host, hash)
+			shortenedUrl = fmt.Sprintf("%s/%s", c.Request.Host, hash)
 
-			var newUrl Url
+			var newUrl models.Url
 
 			newUrl.Url = shortenedUrl
 			newUrl.Clicks = 0
 			newUrl.Expiration = time.Now().Add(48 * time.Hour)
-			newUrl.hash = hash
+			newUrl.Hash = hash
 
 			db[url] = newUrl
 
+		}
+
+		if statusResponse != http.StatusFound {
+			log.Println("DEFAULT", errors)
+			c.HTML(http.StatusConflict, "index.html", views.IndexView("", db, errors))
+		} else {
 			c.Redirect(http.StatusFound, "/tracking?url="+shortenedUrl)
+
 		}
 
 	})
@@ -124,7 +127,7 @@ func main() {
 		hash := c.Param("hash")
 
 		for originalUrl, v := range db {
-			if v.hash == hash {
+			if v.Hash == hash {
 				v.Clicks = v.Clicks + 1
 				db[originalUrl] = v
 				log.Println(db[originalUrl].Clicks)
